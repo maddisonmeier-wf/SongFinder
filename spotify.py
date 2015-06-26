@@ -7,6 +7,37 @@ username = 'mmeier2'
 new_playlist_name = 'Test Songs'
 
 
+def add_tracks(spotify, user, playlist_id, tracks):
+    print spotify._post("users/%s/playlists/%s/tracks" % (user['id'], playlist_id),
+                                payload = tracks)
+    place = 's'
+
+
+def song_doesnt_exists(track, artist_list, names):
+    exists =  track['name'] in names
+
+    if not exists:
+        return True
+
+    print "$"*80
+
+    artists = track['artists']
+    existing_song_artists = [artist for artist in artist_list if track['name'] in artist]
+    for existing in existing_song_artists:
+        same_artists = True
+        existing_artists = existing[track['name']]
+
+        for artist in artists:
+            print existing
+            print artist['name']
+            if artist['name'] not in existing_artists:
+                same_artists = False
+
+        if same_artists:
+            return False
+
+    return True
+
 
 def find_songs():
     scope = 'playlist-read-collaborative'
@@ -36,63 +67,93 @@ def find_songs():
         print playlist_song_count
         print new_playlist_song_count
 
+        playlist_tracks = []
+        #grab all the songs
         for x in range(0,(playlist_song_count/100)+1):
             offset = 100*x
             print offset
             # the current targeted playlist tracks
-            playlist_tracks = spotify.user_playlist_tracks(user['id'],
-                                    playlist['id'], offset=offset)['items']
-            print len(playlist_tracks)
+            playlist_tracks.extend(spotify.user_playlist_tracks(user['id'],
+                                    playlist['id'], offset=offset)['items'])
 
 
-        for x in range(0,(new_playlist_song_count/100)+1):
-            offset = 100*x
-            print offset
-            # the current test playlist tracks
-            new_playlist_tracks = spotify.user_playlist_tracks(user['id'], new_playlist['id'],
-                offset=offset)['items']
-            print len(new_playlist_tracks)
+        print len(playlist_tracks)
+        new_playlist_tracks = []
+        if new_playlist_song_count:
+            for x in range(0,(new_playlist_song_count/100)+1):
+                offset = 100*x
+                print offset
+                # the current test playlist tracks
+                new_playlist_tracks.extend(spotify.user_playlist_tracks(user['id'], new_playlist['id'],
+                    offset=offset)['items'])
 
         # create a list of all songs currently in old playlist and
         # in test playlist
-        songs = [track['track'] for track in playlist_tracks]
-        songs.extend([track['track'] for track in new_playlist_tracks])
+        existing_songs = [track['track'] for track in playlist_tracks]
+        new_songs = [track['track'] for track in new_playlist_tracks]
+
+        #combine lists
+        songs = existing_songs + new_songs
+
+        print len(existing_songs)
+        print len(new_songs)
+        print len(songs)
 
         existing_song_ids = []
+        existing_song_names = []
+        existing_song_artists = []
         playlist_artist_ids = []
         playlist_artist_names = []
+
+
 
         for song in songs:
             # add existing song info for no repeats
             existing_song_ids.append(song['id'])
+            existing_song_names.append(song['name'])
+            existing_song_artists.append({song['name']: [artist['name'] for artist in song['artists']]})
 
             for artist in song['artists']:
                 if artist['id'] not in playlist_artist_ids:
                     playlist_artist_ids.append(artist['id'])
                     playlist_artist_names.append(artist['name'])
 
-        tracks_to_add = [] # ids of new tracks
+        print sorted(existing_song_names)
+        testing = "NONE"
 
+        tracks_to_add = [] # ids of new tracks
+        print "looking for %s artists top hits" % len(playlist_artist_ids)
         for index, artist in enumerate(playlist_artist_ids):
             print "INFO: grabbing %s top songs" % playlist_artist_names[index]
             top_tracks = spotify.artist_top_tracks(artist)['tracks']
             for track in top_tracks:
                 if track['id'] not in existing_song_ids and \
-                    track['uri'] not in tracks_to_add:
-                    print "not found adding: %s " % track['name']
-                    tracks_to_add.append(track['uri'])
+                    track['uri'] not in tracks_to_add and \
+                    song_doesnt_exists(track, existing_song_artists, existing_song_names):
+                        if track['name'] == 'Aaj Hoga Muqabla':
+                            testing = track['uri']
+                        print "not found adding: %s id: %s" % (track['name'],track['id'])
+                        tracks_to_add.append(track['uri'])
 
 
         new_track_count = len(tracks_to_add)
         print "found %s new songs to add" % new_track_count
 
+        pos = 0
+
         for x in range(0,new_track_count/100):
-            print "adding values in range %s-%s" % (x, x+100)
-            adding_tracks = {'uris': tracks_to_add[x:x+100]}
+            pos = x*100
+            print "adding values in range %s-%s" % (pos, pos+100)
+            adding_tracks = {'uris': tracks_to_add[pos:pos+100]}
             #add new tracks
-            # for track in tracks_to_add:
-            print spotify._post("users/%s/playlists/%s/tracks" % (user['id'], new_playlist_id),
-                                payload = adding_tracks)
+            add_tracks(spotify, user, new_playlist_id, adding_tracks)
+
+        pos +=100
+        # add the remaining tracks
+        print "adding values in range %s-%s" % (pos, new_track_count)
+        adding_tracks = {'uris': tracks_to_add[pos:(new_track_count)]}
+        print json.dumps(adding_tracks)
+        add_tracks(spotify, user, new_playlist_id, adding_tracks)
 
 
 def create_test_playlist():
