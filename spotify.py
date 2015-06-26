@@ -59,21 +59,15 @@ def find_songs():
         songs.extend([track['track'] for track in new_playlist_tracks])
 
         existing_song_ids = []
-        existing_song_names = []
-        existing_song_albums = []
-
         playlist_artist_ids = []
         playlist_artist_names = []
 
         for song in songs:
             # add existing song info for no repeats
             existing_song_ids.append(song['id'])
-            existing_song_names.append(song['name'])
-            existing_song_albums.append(song['album']['name'])
 
             for artist in song['artists']:
-                if artist['name'] not in playlist_artist_names and  \
-                    artist['id'] not in playlist_artist_ids:
+                if artist['id'] not in playlist_artist_ids:
                     playlist_artist_ids.append(artist['id'])
                     playlist_artist_names.append(artist['name'])
 
@@ -83,21 +77,22 @@ def find_songs():
             print "INFO: grabbing %s top songs" % playlist_artist_names[index]
             top_tracks = spotify.artist_top_tracks(artist)['tracks']
             for track in top_tracks:
-                if track['name'] in existing_song_names:
-                    print "found %s already in here" % track['name']
-                    track_index = existing_song_names.index(track['name'])
-                    if track['id'] != existing_song_ids[track_index] and \
-                        track['album']['name'] != existing_song_albums[track_index]:
-                        tracks_to_add.append(track['uri'])
-                else:
+                if track['id'] not in existing_song_ids and \
+                    track['uri'] not in tracks_to_add:
+                    print "not found adding: %s " % track['name']
                     tracks_to_add.append(track['uri'])
 
-        testing = {'uris': tracks_to_add[:100]}
-        print json.dumps(testing)
-        #add new tracks
-        # for track in tracks_to_add:
-        # print spotify._post("users/%s/playlists/%s/tracks" % (user['id'], new_playlist_id),
-        #                     payload = testing)
+
+        new_track_count = len(tracks_to_add)
+        print "found %s new songs to add" % new_track_count
+
+        for x in range(0,new_track_count/100):
+            print "adding values in range %s-%s" % (x, x+100)
+            adding_tracks = {'uris': tracks_to_add[x:x+100]}
+            #add new tracks
+            # for track in tracks_to_add:
+            print spotify._post("users/%s/playlists/%s/tracks" % (user['id'], new_playlist_id),
+                                payload = adding_tracks)
 
 
 def create_test_playlist():
