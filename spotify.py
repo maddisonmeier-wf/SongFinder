@@ -1,11 +1,64 @@
+import base64
 import json
 import sys
+import requests
 import spotipy
 import spotipy.util as util
 
+from flask import session
+
+client_id = ''
+client_secrect = ''
 username = 'mmeier2'
 new_playlist_name = 'Test Songs'
+spotify_base_url = 'https://api.spotify.com/v1/'
+auth_header = base64.b64encode('%s:%s' % (client_id, client_secrect))
 
+
+
+def refresh_token():
+    data = {'grant_type': 'refresh_token',
+            'refresh_token': session['refresh_token']
+        }
+    url = 'https://accounts.spotify.com/api/token'
+
+
+    r = requests.post(url,
+                        headers={'Authorization': 'Basic %s' % auth_header},
+                        data=data
+                    )
+
+    response = r.json()
+    print response
+    session['access_token'] = response['access_token']
+    session['token_type'] = response['token_type']
+
+def get_user_info():
+    r = requests.get(spotify_base_url + 'me',
+                        headers={'Authorization': 'Bearer %s' % session['access_token']})
+    response = r.json()
+    print response
+
+    if 'error' in response and 'expired' in response['error']['message']:
+        refresh_token()
+        r = requests.get(spotify_base_url + 'me',
+                        headers={'Authorization': 'Bearer %s' % session['access_token']})
+        response = r.json()
+
+    return response
+
+def get_user_playlists():
+    r = requests.get(spotify_base_url + ('users/%s/playlists' % session['user_id']),
+                    headers={'Authorization': 'Bearer %s' % session['access_token']})
+
+    response = r.json()
+    if 'error' in response and 'expired' in response['error']['message']:
+        refresh_token()
+
+    playlists = [{'name': playlist['name'],
+                    'id': playlist['id']} for playlist in response['items']]
+
+    return playlists
 
 def add_tracks(spotify, user, playlist_id, tracks):
     print spotify._post("users/%s/playlists/%s/tracks" % (user['id'], playlist_id),
@@ -156,23 +209,18 @@ def find_songs():
         add_tracks(spotify, user, new_playlist_id, adding_tracks)
 
 
-def create_test_playlist():
-    scope = 'playlist-modify-public'
+def create_test_playlist(playlist):
+    spotify = spotipy.Spotify(auth=session['access_token'])
 
-    token = util.prompt_for_user_token(username, scope)
+    new_playlist_name = "Maddipy suggested: %s" % playlist
+    test_playlist = spotify.user_playlist_create(session['user_id'], new_playlist_name)
 
-    if token:
-        spotify = spotipy.Spotify(auth=token)
-        user = spotify.current_user()
+    print test_playlist
 
-        test_playlist = spotify.user_playlist_create(user['id'], new_playlist_name)
+# option = sys.argv[1]
 
-        print test_playlist
+# if option == 'create':
+#     create_test_playlist()
 
-option = sys.argv[1]
-
-if option == 'create':
-    create_test_playlist()
-
-elif option == 'find_songs':
-    find_songs()
+# elif option == 'find_songs':
+#     find_songs()
